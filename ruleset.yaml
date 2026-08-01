@@ -1,0 +1,233 @@
+# ruleset.yaml
+#
+# Versioniertes Bewertungs-Regelwerk. Diese Datei ist die einzige Quelle für
+# Gewichte und Abzüge — score.py enthält nur die Prüf-LOGIK (wie wird geprüft),
+# diese Datei enthält die Prüf-GEWICHTUNG (wie viele Punkte kostet es).
+#
+# Wichtig für Nachhaltigkeit: wenn sich Gewichte künftig ändern, hier ändern
+# und "version" hochzählen — alte Audit-Ergebnisse bleiben dadurch nachvollziehbar
+# einer bestimmten Regelwerk-Version zugeordnet (siehe run-manifest.ruleset_version).
+
+version: "2026-07-27.1"
+
+floor: 15  # Gesamtscore fällt nie unter diesen Wert, auch bei vielen Abzügen
+
+category_weights:
+  technik_performance: 25
+  mobil_zugaenglichkeit: 15
+  recht: 20
+  lokale_sichtbarkeit: 20
+  inhalt_aktualitaet: 20
+
+rules:
+
+  # ---------------- Technik & Performance (25) ----------------
+  - id: technik.no_https
+    category: technik_performance
+    automated: true
+    deduction: 25
+    message_internal: "Keine gültige HTTPS-Verbindung"
+    message_customer: "Die Seite ist nicht (durchgängig) über eine sichere Verbindung erreichbar."
+
+  - id: technik.cert_expired
+    category: technik_performance
+    automated: true
+    deduction: 20
+    message_internal: "TLS-Zertifikat abgelaufen"
+    message_customer: "Das Sicherheitszertifikat der Seite ist abgelaufen."
+
+  - id: technik.fcp_over_4s
+    category: technik_performance
+    automated: true
+    deduction: 10
+    message_internal: "First Contentful Paint über 4 Sekunden"
+    message_customer: "Die Seite braucht auf einem normalen Gerät spürbar lange, bis überhaupt etwas sichtbar wird."
+
+  - id: technik.fcp_2_5_to_4s
+    category: technik_performance
+    automated: true
+    deduction: 5
+    message_internal: "First Contentful Paint zwischen 2,5 und 4 Sekunden"
+    message_customer: "Der erste sichtbare Inhalt lädt langsamer als heute üblich."
+
+  - id: technik.page_weight_over_5mb
+    category: technik_performance
+    automated: true
+    deduction: 6
+    message_internal: "Seitengewicht über 5 MB"
+    message_customer: "Die Seite lädt ungewöhnlich viele Daten, was auf dem Handy spürbar ist."
+
+  - id: technik.large_uncompressed_images
+    category: technik_performance
+    automated: true
+    deduction: 4
+    message_internal: "Mind. ein Bild über 1 MB unkomprimiert eingebunden"
+    message_customer: "Einzelne Bilder sind unnötig groß und verlangsamen den Seitenaufbau."
+
+  - id: technik.outdated_cms_known_vulnerable
+    category: technik_performance
+    automated: true
+    deduction: 10
+    message_internal: "CMS-Fingerprint zeigt veraltete, bekannt verwundbare Version"
+    message_customer: "Die verwendete Softwareversion im Hintergrund ist veraltet und bekannt angreifbar."
+
+  # ---------------- Mobil & Zugänglichkeit (15) ----------------
+  - id: mobil.no_responsive_viewport
+    category: mobil_zugaenglichkeit
+    automated: true
+    deduction: 15
+    message_internal: "Kein responsive Viewport-Meta-Tag gefunden"
+    message_customer: "Die Seite ist nicht für Mobilgeräte optimiert."
+
+  - id: mobil.viewport_blocks_zoom
+    category: mobil_zugaenglichkeit
+    automated: true
+    deduction: 6
+    message_internal: "user-scalable=no oder maximum-scale=1 im Viewport gesetzt"
+    message_customer: "Nutzer können auf dem Handy nicht in die Seite hineinzoomen."
+
+  - id: mobil.alt_text_missing_majority
+    category: mobil_zugaenglichkeit
+    automated: true
+    deduction: 4
+    message_internal: "Mehr als 50% der Bilder ohne Alt-Text"
+    message_customer: "Die meisten Bilder haben keine Beschreibung für Screenreader oder Suchmaschinen."
+
+  - id: mobil.tap_targets_too_small
+    category: mobil_zugaenglichkeit
+    automated: false  # v2: braucht Layout-Messung der gerenderten Elemente
+    deduction: 4
+    message_internal: "Tap-Targets vermutlich unter 44px (manuell zu prüfen)"
+    message_customer: "Bedienelemente könnten auf dem Handy zu klein zum Antippen sein."
+
+  - id: mobil.low_contrast_text
+    category: mobil_zugaenglichkeit
+    automated: false  # v2: braucht Farbkontrast-Berechnung auf gerenderten Farben
+    deduction: 3
+    message_internal: "Kontrastverhältnis vermutlich unter 4.5:1 (manuell zu prüfen)"
+    message_customer: "Text könnte auf manchen Bildschirmen schwer lesbar sein."
+
+  # ---------------- Recht (20) ----------------
+  - id: recht.impressum_missing
+    category: recht
+    automated: true
+    deduction: 20
+    message_internal: "Kein Impressum auffindbar"
+    message_customer: "Ein Impressum ist auf der Seite nicht auffindbar."
+
+  - id: recht.impressum_no_authorized_rep
+    category: recht
+    automated: true
+    deduction: 5
+    message_internal: "Impressum ohne erkennbaren Vertretungsberechtigten"
+    message_customer: "Im Impressum fehlt eine verantwortliche Person."
+
+  - id: recht.outdated_legal_reference
+    category: recht
+    automated: true
+    deduction: 4
+    message_internal: "Impressum verweist auf RStV/TMG statt MStV/DDG"
+    message_customer: "Das Impressum verweist auf inzwischen abgelöste Gesetzestexte."
+
+  - id: recht.datenschutz_missing
+    category: recht
+    automated: true
+    deduction: 15
+    message_internal: "Keine Datenschutzerklärung auffindbar"
+    message_customer: "Eine Datenschutzerklärung ist auf der Seite nicht auffindbar."
+
+  - id: recht.third_party_before_consent
+    category: recht
+    automated: true
+    deduction_per_unit: 8
+    max_deduction: 12
+    message_internal: "Drittanbieter-Request vor jeder Consent-Interaktion beobachtet"
+    message_customer: "Es werden externe Dienste geladen, bevor eine Einwilligung eingeholt wird."
+
+  - id: recht.form_without_privacy_notice
+    category: recht
+    automated: false  # v2: braucht Formularerkennung + Textnähe-Analyse
+    deduction: 4
+    message_internal: "Kontaktformular ohne erkennbaren Datenschutzhinweis (manuell zu prüfen)"
+    message_customer: "Beim Kontaktformular fehlt ein Hinweis zur Datenverarbeitung."
+
+  # ---------------- Lokale Sichtbarkeit (20) ----------------
+  - id: seo.no_localbusiness_schema
+    category: lokale_sichtbarkeit
+    automated: true
+    deduction: 5
+    message_internal: "Kein LocalBusiness-Schema (JSON-LD) gefunden"
+    message_customer: "Suchmaschinen fehlt eine strukturierte Kennzeichnung als lokales Unternehmen."
+
+  - id: seo.no_location_in_title_h1
+    category: lokale_sichtbarkeit
+    automated: false  # v2: braucht einen erwarteten Standort als Eingabeparameter pro Kunde
+    deduction: 5
+    message_internal: "Kein Ortsbezug in Title oder H1 der Startseite (manuell zu prüfen)"
+    message_customer: "Die Startseite nennt in Titel/Überschrift keinen Ort — schwächt die lokale Auffindbarkeit."
+
+  - id: seo.no_sitemap_or_robots
+    category: lokale_sichtbarkeit
+    automated: true
+    deduction: 3
+    message_internal: "Weder robots.txt noch sitemap.xml erreichbar"
+    message_customer: "Es gibt keine Sitemap, die Suchmaschinen das Auffinden aller Seiten erleichtert."
+
+  - id: seo.nap_inconsistent
+    category: lokale_sichtbarkeit
+    automated: false  # v2: braucht Abgleich mit Google-Unternehmensprofil (Places API)
+    deduction: 5
+    message_internal: "Name/Adresse/Telefon vermutlich inkonsistent zum Google-Profil (manuell zu prüfen)"
+    message_customer: "Adressangaben könnten uneinheitlich zu anderen Verzeichnissen sein."
+
+  - id: seo.no_google_business_profile
+    category: lokale_sichtbarkeit
+    automated: false  # v2: braucht Places API Abgleich
+    deduction: 8
+    message_internal: "Kein verknüpftes Google-Unternehmensprofil gefunden (manuell zu prüfen)"
+    message_customer: "Es ist kein Google-Unternehmensprofil verknüpft."
+
+  # ---------------- Inhalt & Aktualität (20) ----------------
+  - id: inhalt.construction_notice_visible
+    category: inhalt_aktualitaet
+    automated: true
+    deduction: 8
+    message_internal: "Baustellenhinweis/Under-Construction-Text sichtbar im Haupttext"
+    message_customer: "Auf der Seite steht ein sichtbarer Hinweis auf unfertige Inhalte."
+
+  - id: inhalt.copyright_year_old
+    category: inhalt_aktualitaet
+    automated: true
+    deduction: 5
+    message_internal: "Copyright-Jahr im Footer älter als 2 Jahre"
+    message_customer: "Die Jahresangabe im Footer ist veraltet."
+
+  - id: inhalt.template_placeholder_in_production
+    category: inhalt_aktualitaet
+    automated: true
+    deduction: 6
+    message_internal: "Platzhalter-Inhalt gefunden (z.B. dummy.png, Lorem Ipsum, Theme-Credits)"
+    message_customer: "Es sind noch Platzhalter-Inhalte aus der Erstellung sichtbar."
+
+  - id: inhalt.dead_external_link
+    category: inhalt_aktualitaet
+    automated: true
+    deduction_per_unit: 2
+    max_deduction: 8
+    message_internal: "Externer Link mit Fehlerstatus (4xx/5xx)"
+    message_customer: "Einzelne Verweise auf der Seite funktionieren nicht mehr."
+
+  - id: inhalt.thin_content_page
+    category: inhalt_aktualitaet
+    automated: false  # v2: braucht Mehrseiten-Crawl der ganzen Domain, v1 crawlt nur die Startseite
+    deduction_per_unit: 3
+    max_deduction: 9
+    message_internal: "Unterseite mit unter 150 Wörtern Fließtext (manuell zu prüfen)"
+    message_customer: "Manche Unterseiten haben kaum eigenen Inhalt."
+
+  - id: inhalt.no_references_or_portfolio
+    category: inhalt_aktualitaet
+    automated: true
+    deduction: 5
+    message_internal: "Keine Referenzen/Portfolio/Kundenstimmen auffindbar"
+    message_customer: "Es fehlen Referenzen oder Beispiele bisheriger Arbeit."
