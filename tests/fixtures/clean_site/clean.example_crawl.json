@@ -2,7 +2,7 @@
   "url": "https://clean.example",
   "domain": "clean.example",
   "crawled_at": "2026-07-27T10:00:00Z",
-  "html": "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><script type=\"application/ld+json\">{\"@type\":\"LocalBusiness\"}</script></head><body><img src=\"a.jpg\" alt=\"Beschreibung A\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a><p>Referenzen: unsere Projekte der letzten Jahre.</p><footer>© 2026 Clean Example</footer></body></html>",
+  "html": "<html lang=\"de\"><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Musterfirma – Leistungen und Referenzen</title><meta name=\"description\" content=\"Musterfirma bietet professionelle Leistungen mit langjähriger Erfahrung und geprüften Referenzen für Unternehmen.\"><link rel=\"canonical\" href=\"https://clean.example/\"><meta property=\"og:title\" content=\"Musterfirma – Leistungen\"><meta property=\"og:description\" content=\"Professionelle Leistungen mit geprüften Referenzen.\"><script type=\"application/ld+json\">{\"@type\":\"LocalBusiness\"}</script></head><body><h1>Musterfirma</h1><img src=\"a.jpg\" alt=\"Beschreibung A\"><a href=\"/impressum\">Impressum</a><a href=\"/datenschutz\">Datenschutz</a><p>Referenzen: unsere Projekte der letzten Jahre.</p><footer>© 2026 Clean Example</footer></body></html>",
   "main_status": 200,
   "main_headers": {},
   "requests": [

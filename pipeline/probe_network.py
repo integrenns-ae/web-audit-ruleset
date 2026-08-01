@@ -31,12 +31,25 @@ KNOWN_TRACKERS = {
 }
 
 PLACEHOLDER_PATTERNS = [
-    r"dummy\.(png|jpg|jpeg)",
     r"lorem ipsum",
-    r"placeholder\.(png|jpg|com)",
     r"theme[- ]?credits?",
     r"edit with lovable",
 ]
+
+# Platzhalter-Bilddateien (dummy/placeholder) werden separat und LAZY-LOAD-BEWUSST
+# geprüft: Slider/Lazy-Load-Bibliotheken setzen dummy.png als src, während das
+# echte Bild in data-lazyload/data-src steht - das ist KEIN echter Platzhalter.
+_IMAGE_PLACEHOLDER_RE = re.compile(r"(?:dummy|placeholder)\.(?:png|jpg|jpeg)", re.I)
+# Marker für Lazy-Load- oder Slider-Frameworks. Wenn IRGENDWO auf der Seite eines
+# davon vorkommt, sind dummy/placeholder-Bilder technische Stand-ins (Slider
+# Revolution liefert dummy.png genau dafür mit; das echte Bild lädt JS nach) -
+# kein unfertiger Inhalt. Global geprüft, weil dieselbe Seite dummy.png sowohl in
+# <img src> als auch in CSS background:url() an vielen Stellen einsetzt.
+_LAZYLOAD_MARKERS = (
+    "data-lazyload", "data-src", "data-original", "data-lazydone",
+    "data-bgposition", "data-bg", "lazyload", "lazy-load", "lazyestload",
+    "rev_slider", "revslider", "tp-banner", "tp-arr-", "tp-bullets", "tp-loader",
+)
 
 CONSTRUCTION_PATTERNS = [
     r"befindet sich (noch |gerade )?im aufbau",
@@ -74,9 +87,23 @@ def check_legal_pages_linked(html: str) -> dict:
     }
 
 
+def _real_image_placeholder(lower_html: str) -> bool:
+    """True nur, wenn ein dummy/placeholder-Bild als ECHTER Platzhalter auftaucht -
+    NICHT als Lazy-Loading-/Slider-Stand-in. Nutzt die Seite irgendwo ein Lazy-Load-
+    oder Slider-Framework, sind dummy.png-Referenzen technische Stand-ins."""
+    if not _IMAGE_PLACEHOLDER_RE.search(lower_html):
+        return False
+    if any(mark in lower_html for mark in _LAZYLOAD_MARKERS):
+        return False  # Lazy-Load/Slider-Kontext -> kein unfertiger Inhalt
+    return True
+
+
 def check_placeholders(html: str) -> list:
     lower = html.lower()
-    return [pat for pat in PLACEHOLDER_PATTERNS if re.search(pat, lower)]
+    found = [pat for pat in PLACEHOLDER_PATTERNS if re.search(pat, lower)]
+    if _real_image_placeholder(lower):
+        found.append("dummy/placeholder-bild (kein lazy-load)")
+    return found
 
 
 def check_construction_notice(html: str) -> bool:

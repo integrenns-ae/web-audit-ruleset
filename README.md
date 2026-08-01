@@ -64,7 +64,7 @@ Lücke zwischen "Regelwerk verspricht" und "Code liefert tatsächlich".
 
 ## Aktueller Stand: automatisiert vs. manuell
 
-24 Regeln insgesamt, davon **19 automatisiert**, **5 noch manuell** zu prüfen
+37 Regeln insgesamt, davon **30 automatisiert**, **7 noch manuell** zu prüfen
 (im Bericht unter "Noch manuell zu prüfen" aufgelistet, fließen nicht in den
 Score ein):
 

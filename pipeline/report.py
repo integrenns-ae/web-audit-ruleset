@@ -15,6 +15,7 @@ CATEGORY_LABELS = {
     "technik_performance": "Technik & Performance",
     "mobil_zugaenglichkeit": "Mobil & Zugänglichkeit",
     "recht": "Recht",
+    "auffindbarkeit_seo": "Auffindbarkeit / SEO",
     "lokale_sichtbarkeit": "Lokale Sichtbarkeit",
     "inhalt_aktualitaet": "Inhalt & Aktualität",
 }
@@ -32,8 +33,30 @@ def render_report(score_result: dict, crawl_meta: dict) -> str:
     lines.append("| Kategorie | Punkte |")
     lines.append("|---|---|")
     for cat, val in score_result["category_scores"].items():
-        lines.append(f"| {CATEGORY_LABELS.get(cat, cat)} | {val} |")
+        suffix = " *(nicht anwendbar)*" if cat in score_result.get("suppressed_categories", []) else ""
+        lines.append(f"| {CATEGORY_LABELS.get(cat, cat)}{suffix} | {val} |")
     lines.append("")
+
+    locality_labels = {
+        "local": "lokaler Dienstleister – Kategorie „Lokale Sichtbarkeit“ wird bewertet",
+        "non_local": "ortsunabhängiger Dienstleister – Kategorie „Lokale Sichtbarkeit“ nicht bewertet",
+        "unknown": "Geschäftstyp unklar – im Zweifel wie ein lokaler Dienstleister bewertet",
+    }
+    loc = score_result.get("business_locality")
+    if loc:
+        label = locality_labels.get(loc, loc)
+        if score_result.get("is_non_profit"):
+            label += " · Non-Profit erkannt (Verein/Gemeinde) – geschäftsspezifische Regeln entfallen"
+        lines.append(f"Geschätzter Organisationstyp: {label}")
+        lines.append("")
+
+    pc = score_result.get("page_count") or {}
+    if pc.get("estimate") is not None:
+        quelle = "laut Sitemap" if pc.get("source") == "sitemap" else "aus Startseiten-Links (Untergrenze)"
+        lines.append(f"Umfang des Auftritts: ~{pc['estimate']} einzelne Seiten ({quelle})")
+        if pc.get("sitemap_urls") and pc.get("internal_links_home") is not None:
+            lines.append(f"  (Sitemap: {pc['sitemap_urls']} Seiten · von der Startseite verlinkt: {pc['internal_links_home']})")
+        lines.append("")
 
     if score_result["findings"]:
         lines.append("## Befunde (automatisiert erkannt)")
@@ -53,6 +76,27 @@ def render_report(score_result: dict, crawl_meta: dict) -> str:
         lines.append("")
         for r in score_result["manual_review_needed"]:
             lines.append(f"- [{CATEGORY_LABELS.get(r['category'], r['category'])}] {r['message_internal']}")
+        lines.append("")
+
+    if score_result.get("not_applicable"):
+        lines.append("## Nicht bewertet (für diesen Organisationstyp nicht relevant)")
+        lines.append("")
+        lines.append("Diese Punkte fließen mit voller Punktzahl ein, weil sie für "
+                     "diesen Organisationstyp kein echtes Qualitätskriterium sind:")
+        for r in score_result["not_applicable"]:
+            lines.append(f"- [{CATEGORY_LABELS.get(r['category'], r['category'])}] {r['message_internal']}")
+        lines.append("")
+
+    if score_result.get("unverified_external_links"):
+        lines.append("## Nicht automatisch prüfbar (bitte manuell ansehen)")
+        lines.append("")
+        lines.append("Diese externen Links wehren automatisierte Zugriffe ab (Bot-Schutz "
+                     "der Zielseite) und konnten nicht verlässlich geprüft werden – sie "
+                     "zählen NICHT als Fehler, funktionieren für echte Besucher meist "
+                     "normal. Einmal im Browser gegenprüfen:")
+        for d in score_result["unverified_external_links"]:
+            st = d.get("status") or "Timeout"
+            lines.append(f"- {d.get('url')} (Status: {st})")
         lines.append("")
 
     lines.append("## Rohdaten")

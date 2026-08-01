@@ -42,6 +42,32 @@ async def run_audit(url: str) -> Path:
 
     print(f"[1/5] Crawle {url} ...")
     crawl_result = await crawl(url, run_dir)
+
+    # Schema-Fallback + Fehlerseiten-Schutz: Antwortet die Startseite nicht sauber
+    # (Timeout/None oder 4xx/5xx), das andere Schema versuchen. So wird z.B. eine
+    # kaputte HTTPS-Seite (503), die per http funktioniert, korrekt über http
+    # auditiert - statt die Fehlerseite zu bewerten.
+    status = crawl_result.get("main_status")
+    if status is None or status >= 400:
+        scheme = urlparse(url).scheme
+        alt = (url.replace("https://", "http://", 1) if scheme == "https"
+               else url.replace("http://", "https://", 1))
+        print(f"      Startseite antwortet mit Status {status} über {scheme} "
+              f"- versuche {urlparse(alt).scheme} ...")
+        alt_result = await crawl(alt, run_dir)
+        alt_status = alt_result.get("main_status")
+        if alt_status is not None and alt_status < 400:
+            url, crawl_result, status = alt, alt_result, alt_status
+            print(f"      OK über {urlparse(alt).scheme} (Status {alt_status}).")
+
+    # Beide Schemata unbrauchbar -> NICHT scoren (sonst Müll-Score aus Fehlerseite).
+    if status is None or status >= 400:
+        print()
+        print(f"NICHT AUDITIERBAR: Startseite liefert Status {status} (auch über das "
+              f"alternative Schema). Server blockiert automatisierte Zugriffe oder ist "
+              f"offline - es wird bewusst KEIN Score erzeugt.")
+        return None
+
     print(f"      {len(crawl_result['requests'])} Requests, "
           f"FCP={crawl_result['timing'].get('first_contentful_paint_ms')}ms")
 
@@ -69,4 +95,5 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Nutzung: python audit.py <url>")
         sys.exit(1)
-    asyncio.run(run_audit(sys.argv[1]))
+    result = asyncio.run(run_audit(sys.argv[1]))
+    sys.exit(0 if result else 2)

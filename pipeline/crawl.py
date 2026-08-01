@@ -16,6 +16,7 @@ Output: crawl/<domain>.json mit:
 """
 
 import asyncio
+import os
 import json
 import time
 from pathlib import Path
@@ -32,7 +33,12 @@ async def crawl(url: str, out_dir: Path) -> dict:
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
+        # AUDIT_INSECURE_TLS=1 nur setzen, wenn die Umgebung einen TLS-terminierenden
+        # Egress-Proxy mit eigener CA benutzt (z.B. die Claude-Sandbox). Auf dem
+        # Hetzner-VPS/lokal NICHT setzen - dort gilt normale Zertifikatsprüfung.
+        _insecure_tls = os.environ.get("AUDIT_INSECURE_TLS") == "1"
         context = await browser.new_context(
+            ignore_https_errors=_insecure_tls,
             viewport={"width": 390, "height": 844},  # mobile-first, wie die Zielgruppe surft
             user_agent=(
                 "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 "

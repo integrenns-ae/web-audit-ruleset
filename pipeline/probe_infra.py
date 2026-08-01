@@ -7,6 +7,7 @@ Netzwerkzugriff (ssl-Handshake, HTTP-Requests) - nicht in dieser Sandbox lauffae
 """
 
 import json
+import re
 import socket
 import ssl
 from datetime import datetime, timezone
@@ -128,6 +129,89 @@ def check_external_links(html: str, own_domain: str, max_links: int = 20) -> lis
     return dead
 
 
+def _page_locs(xml_text: str) -> set:
+    """Seiten-URLs aus einer Sitemap; Bild-/PDF-/Asset-URLs werden ausgefiltert."""
+    locs = re.findall(r"<url>.*?<loc>\s*([^<\s]+)\s*</loc>", xml_text, re.I | re.S)
+    if not locs:
+        locs = re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", xml_text, re.I | re.S)
+    return {u for u in locs
+            if not re.search(r"\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|xml|css|js)(\?|$)", u, re.I)}
+
+
+def _collect_sitemap_urls(base_url: str, max_sub: int = 12) -> int:
+    """Anzahl Seiten laut Sitemap. Löst Sitemap-Index-Dateien (die auf Unter-
+    Sitemaps zeigen) auf. Gibt None zurück, wenn keine Sitemap erreichbar ist."""
+    def fetch(url):
+        try:
+            r = requests.get(url, timeout=8)
+            return r.text if r.status_code == 200 and r.text.strip() else None
+        except Exception:
+            return None
+
+    root = fetch(base_url.rstrip("/") + "/sitemap.xml") or fetch(base_url.rstrip("/") + "/sitemap_index.xml")
+    if not root:  # robots.txt kann auf eine abweichende Sitemap verweisen
+        try:
+            rb = requests.get(base_url.rstrip("/") + "/robots.txt", timeout=8)
+            m = re.search(r"(?i)sitemap:\s*(\S+)", rb.text)
+            if m:
+                root = fetch(m.group(1).strip())
+        except Exception:
+            pass
+    if not root:
+        return None
+
+    if re.search(r"<sitemapindex", root, re.I):
+        subs = re.findall(r"<sitemap>.*?<loc>\s*([^<\s]+)\s*</loc>", root, re.I | re.S)
+        urls = set()
+        for loc in subs[:max_sub]:
+            body = fetch(loc.strip())
+            if body:
+                urls.update(_page_locs(body))
+        return len(urls) or None
+    return len(_page_locs(root)) or None
+
+
+def _count_internal_page_links(html: str, domain: str) -> int:
+    """Anzahl unterschiedlicher interner Seiten, die von der Startseite verlinkt
+    sind (Navigation + Body). Untergrenze für die Größe des Auftritts."""
+    paths = set()
+    for h in re.findall(r'href=["\']([^"\']+)["\']', html, re.I):
+        h = h.strip()
+        if not h or h.startswith(("#", "mailto:", "tel:", "javascript:", "data:")):
+            continue
+        if h.startswith("http"):
+            if domain not in h:
+                continue
+            path = re.sub(r"^https?://[^/]+", "", h)
+        else:
+            path = h
+        path = path.split("#")[0].split("?")[0].rstrip("/") or "/"
+        if re.search(r"\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|css|js|ico|mp4|woff2?)$", path, re.I):
+            continue
+        paths.add(path.lower())
+    return len(paths)
+
+
+def estimate_page_count(base_url: str, html: str, domain: str) -> dict:
+    """Schätzt die Zahl einzelner Seiten des Web-Auftritts. Informativ (kein
+    Abzug). Sitemap zählt als vollständigste Quelle, sonst die Startseiten-Links."""
+    result = {"sitemap_urls": None, "internal_links_home": None,
+              "estimate": None, "source": None}
+    try:
+        result["sitemap_urls"] = _collect_sitemap_urls(base_url)
+    except Exception:
+        pass
+    try:
+        result["internal_links_home"] = _count_internal_page_links(html, domain)
+    except Exception:
+        pass
+    if result["sitemap_urls"]:
+        result["estimate"], result["source"] = result["sitemap_urls"], "sitemap"
+    elif result["internal_links_home"] is not None:
+        result["estimate"], result["source"] = result["internal_links_home"], "startseiten-links"
+    return result
+
+
 def probe_infra(crawl_result: dict, out_dir: Path) -> dict:
     domain = crawl_result["domain"]
     base_url = crawl_result["url"]
@@ -140,6 +224,7 @@ def probe_infra(crawl_result: dict, out_dir: Path) -> dict:
         "legal_pages": check_legal_pages_reachable(base_url),
         "cms": detect_cms(crawl_result["html"], crawl_result.get("main_headers", {})),
         "dead_external_links": check_external_links(crawl_result["html"], domain),
+        "page_count": estimate_page_count(base_url, crawl_result["html"], domain),
     }
 
     out_path = out_dir / f"{domain}_probe_infra.json"
