@@ -1,3 +1,14 @@
+> ## ⚠️ ÜBERHOLT — historisches Dokument
+>
+> Diese Datei beschreibt den Stand vom 27.07.2026, als das Regelwerk noch manuell
+> angestoßen wurde. Sie bleibt als Entstehungsgeschichte erhalten.
+>
+> **Maßgeblich ist heute:**
+> [`expert-showcase-site/HANDOFF.md`](https://github.com/integrenns-ae/expert-showcase-site/blob/main/HANDOFF.md)
+> — dort stehen die aktuelle Architektur, die Zugänge und der vollständige Ablauf,
+> um eine Regeländerung live zu bringen (Ruleset ändern → ins Worker-Repo vendoren →
+> Worker mit `--build` deployen).
+
 # HANDOFF.md — Audit-Pipeline für integrenns.de
 
 Stand: 27.07.2026, Übergabe aus einer Vorgänger-Unterhaltung wegen Netzwerk-

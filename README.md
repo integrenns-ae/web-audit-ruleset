@@ -1,5 +1,12 @@
 # Audit-Pipeline (v1 — manuell getriggert)
 
+> **Gesamt-Übergabe:** Dieses Repo ist Teil des Website-Check-Systems von integrenns.de.
+> Die vollständige Dokumentation — Architektur der Kette, Zugänge, Deploy-Prozeduren für alle
+> drei Repos, Gotchas und offene Punkte — steht zentral in
+> [`expert-showcase-site/HANDOFF.md`](https://github.com/integrenns-ae/expert-showcase-site/blob/main/HANDOFF.md).
+> **Vor substanzieller Arbeit dort zuerst lesen.**
+
+
 Automatisierter Website-Audit: Technik, Recht, lokale Sichtbarkeit, Inhalt.
 Score ist deterministisch (Code, kein LLM) und reproduzierbar — derselbe
 Crawl-Stand ergibt immer denselben Score. Das ist Absicht, siehe `ruleset.yaml`.
