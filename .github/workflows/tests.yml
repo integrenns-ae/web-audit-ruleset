@@ -1,0 +1,43 @@
+name: Regelwerk-Tests
+
+# Dieses Repo deployt nichts – es ist die QUELLE des Regelwerks.
+# Produktiv wirkt erst die Kopie in web-audit-worker/ruleset/.
+# Hier wird nur geprüft, dass die Regeln in sich stimmen.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'runs/**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Abhängigkeiten
+        run: python3 -m pip install --quiet pytest requests pyyaml
+
+      - name: Tests
+        run: python3 -m pytest tests/ -q
+
+      - name: Version prüfen
+        # Eine Regeländerung ohne Versionssprung macht später nicht
+        # nachvollziehbar, welche Fassung ein gespeichertes Ergebnis erzeugt hat.
+        run: |
+          VERSION=$(grep -m1 '^version:' ruleset.yaml | cut -d'"' -f2)
+          echo "Version: $VERSION"
+          [ -n "$VERSION" ] || { echo "Keine Version in ruleset.yaml"; exit 1; }
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            if git diff --name-only HEAD~1 HEAD | grep -qE '^(pipeline/|ruleset\.yaml)'; then
+              VORHER=$(git show HEAD~1:ruleset.yaml 2>/dev/null | grep -m1 '^version:' | cut -d'"' -f2 || echo "")
+              if [ "$VERSION" = "$VORHER" ]; then
+                echo "::warning::Regeln geändert, aber Version blieb $VERSION – bitte hochzählen."
+              fi
+            fi
+          fi
+
+      - name: Erinnerung ans Vendoring
+        run: |
+          echo "::notice::Diese Änderung ist NICHT live. Sie wirkt erst, wenn sie nach web-audit-worker/ruleset/ kopiert und dort gepusht wurde – dann deployt die Worker-Pipeline automatisch."
