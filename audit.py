@@ -32,6 +32,39 @@ from pipeline.score import run_score
 from pipeline.report import run_report
 
 
+def anderes_schema(url: str) -> str:
+    """https <-> http. Alles andere bleibt unveraendert."""
+    if url.startswith("https://"):
+        return url.replace("https://", "http://", 1)
+    if url.startswith("http://"):
+        return url.replace("http://", "https://", 1)
+    return url
+
+
+async def crawl_ohne_werfen(url: str, run_dir: Path):
+    """Wie crawl(), liefert aber None statt zu werfen.
+
+    Der Grund ist der Unterschied zwischen "antwortet schlecht" und
+    "antwortet gar nicht": Ein TLS-Fehler (net::ERR_CERT_*, ERR_SSL_*) laesst
+    Playwright WERFEN, er liefert keinen schlechten Status. Der Schema-
+    Rueckfall weiter unten sah aber nur auf den Status - eine Seite ohne
+    HTTPS, die ueber http einwandfrei antwortet, galt deshalb als "nicht
+    erreichbar" und wurde verworfen.
+
+    Das traf systematisch die falschen: Eine Firmenseite ohne HTTPS verliert
+    im Score 25 Punkte und waere der deutlichste aller Befunde - sie kam aber
+    nie bis zur Bewertung. Nachgewiesen an tierarztpraxis-doerr.de und
+    recht-giessen.de, beide ueber http einwandfrei erreichbar.
+    """
+    try:
+        return await crawl(url, run_dir)
+    except Exception as e:  # noqa: BLE001 - jeder Crawl-Fehler soll den Rueckfall erlauben
+        kurz = str(e).splitlines()[0][:120] if str(e) else ""
+        print(f"      Crawl ueber {urlparse(url).scheme} fehlgeschlagen: "
+              f"{type(e).__name__}: {kurz}")
+        return None
+
+
 async def run_audit(url: str) -> Path:
     if not url.startswith("http"):
         url = "https://" + url
@@ -53,27 +86,27 @@ async def run_audit(url: str) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[1/5] Crawle {url} ...")
-    crawl_result = await crawl(url, run_dir)
+    crawl_result = await crawl_ohne_werfen(url, run_dir)
 
-    # Schema-Fallback + Fehlerseiten-Schutz: Antwortet die Startseite nicht sauber
-    # (Timeout/None oder 4xx/5xx), das andere Schema versuchen. So wird z.B. eine
-    # kaputte HTTPS-Seite (503), die per http funktioniert, korrekt über http
-    # auditiert - statt die Fehlerseite zu bewerten.
-    status = crawl_result.get("main_status")
+    # Schema-Fallback + Fehlerseiten-Schutz: Kommt über das erste Schema keine
+    # brauchbare Antwort, das andere versuchen. "Keine brauchbare Antwort"
+    # heißt dreierlei - der Crawl ist geworfen (crawl_result None, typisch bei
+    # TLS-Fehlern), er lieferte keinen Status, oder einen ab 400. Alle drei
+    # Fälle gehören in den Rückfall; vorher griff nur der dritte.
+    status = crawl_result.get("main_status") if crawl_result else None
     if status is None or status >= 400:
         scheme = urlparse(url).scheme
-        alt = (url.replace("https://", "http://", 1) if scheme == "https"
-               else url.replace("http://", "https://", 1))
-        print(f"      Startseite antwortet mit Status {status} über {scheme} "
-              f"- versuche {urlparse(alt).scheme} ...")
-        alt_result = await crawl(alt, run_dir)
-        alt_status = alt_result.get("main_status")
+        alt = anderes_schema(url)
+        print(f"      Startseite liefert über {scheme} keine brauchbare Antwort "
+              f"(Status {status}) - versuche {urlparse(alt).scheme} ...")
+        alt_result = await crawl_ohne_werfen(alt, run_dir)
+        alt_status = alt_result.get("main_status") if alt_result else None
         if alt_status is not None and alt_status < 400:
             url, crawl_result, status = alt, alt_result, alt_status
             print(f"      OK über {urlparse(alt).scheme} (Status {alt_status}).")
 
     # Beide Schemata unbrauchbar -> NICHT scoren (sonst Müll-Score aus Fehlerseite).
-    if status is None or status >= 400:
+    if crawl_result is None or status is None or status >= 400:
         print()
         print(f"NICHT AUDITIERBAR: Startseite liefert Status {status} (auch über das "
               f"alternative Schema). Server blockiert automatisierte Zugriffe oder ist "

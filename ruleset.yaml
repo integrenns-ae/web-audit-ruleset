@@ -8,7 +8,26 @@
 # und "version" hochzählen — alte Audit-Ergebnisse bleiben dadurch nachvollziehbar
 # einer bestimmten Regelwerk-Version zugeordnet (siehe run-manifest.ruleset_version).
 
-version: "2026-07-27.18"
+version: "2026-07-27.19"
+# Änderungen ggü. .18:
+#  - Schema-Rückfall greift jetzt auch, wenn der Crawl WIRFT statt einen
+#    schlechten Status zu liefern. Ein TLS-Fehler (net::ERR_CERT_*,
+#    ERR_SSL_*) lässt Playwright eine Ausnahme werfen; der Rückfall sah aber
+#    nur auf main_status. Folge: Eine Seite ohne HTTPS, die über http
+#    einwandfrei antwortet, galt als "nicht erreichbar" und wurde komplett
+#    verworfen - ohne Score, ohne Befund.
+#    Das traf systematisch die falschen: Wer kein HTTPS hat, verliert im
+#    Score 25 Punkte (technik.no_https) und wäre der deutlichste Befund
+#    überhaupt - kam aber nie bis zur Bewertung.
+#    Nachgewiesen an tierarztpraxis-dörr.de (nur http, liefert 43 Punkte,
+#    davon -25 für fehlendes HTTPS) und recht-giessen.de (Zertifikat auf
+#    einen fremden Namen ausgestellt, über http erreichbar).
+#    Beide crawl-Aufrufe laufen jetzt über audit.py::crawl_ohne_werfen; auch
+#    der zweite war vorher ungeschützt. Neu ausgewiesen: audit.py::
+#    anderes_schema tauscht nur das ERSTE Vorkommen, damit eine URL mit einem
+#    Link im Query-String sich nicht selbst zerschiesst.
+#  - KEINE Änderung an Gewichten oder Regeln - nur mehr Seiten erreichen
+#    ueberhaupt die Bewertung.
 # Änderungen ggü. .17:
 #  - recht.datenschutz_missing loeste Fehlbefunde aus, wenn die
 #    Datenschutzerklärung MIT im Impressum abgedruckt ist. Kleine deutsche
