@@ -504,10 +504,25 @@ def _check_no_references_or_portfolio(infra, perf, network, crawl_meta):
     return not any(k in html_lower for k in keywords)
 
 
+# Abgeloeste Gesetze - auch ausgeschrieben. Viele Impressen nennen das Gesetz
+# beim vollen Namen statt der Abkuerzung ("Pflichtangaben nach § 5
+# Telemediengesetz" auf zahnarzt-argus.de, "§ 10 Absatz 3 MDStV" bei
+# tierarztpraxis-doerr.de). Mit reiner Abkuerzungssuche blieben die unentdeckt.
+_ABGELOESTE_GESETZE = (
+    "rstv", "§ 55", "tmg", "telemediengesetz",
+    "mdstv", "mediendienste-staatsvertrag", "mediendienstestaatsvertrag",
+)
+# Nennt die Seite das aktuelle Recht, ist sie gepflegt - dann kein Abzug,
+# auch wenn sie das alte zusaetzlich zitiert ("DDG, vormals TMG").
+_AKTUELLES_RECHT = ("mstv", "ddg", "digitale-dienste-gesetz")
+
+
 def _check_outdated_legal_reference(infra, perf, network, crawl_meta):
     impressum_text = crawl_meta.get("legal_subpages", {}).get("impressum", {}).get("text_content", "")
     lower = impressum_text.lower()
-    return ("rstv" in lower or "§ 55" in lower or "tmg" in lower) and "mstv" not in lower and "ddg" not in lower
+    veraltet = any(g in lower for g in _ABGELOESTE_GESETZE)
+    aktuell = any(g in lower for g in _AKTUELLES_RECHT)
+    return veraltet and not aktuell
 
 
 def _check_impressum_no_authorized_rep(infra, perf, network, crawl_meta):

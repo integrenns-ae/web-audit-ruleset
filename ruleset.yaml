@@ -8,7 +8,37 @@
 # und "version" hochzählen — alte Audit-Ergebnisse bleiben dadurch nachvollziehbar
 # einer bestimmten Regelwerk-Version zugeordnet (siehe run-manifest.ruleset_version).
 
-version: "2026-07-27.19"
+version: "2026-07-27.20"
+# Änderungen ggü. .19:
+#  - Der Crawler folgt jetzt den LINKS der Seite, statt nur Pfade zu raten.
+#    Neues Modul pipeline/rechtsseiten.py: Ein Rechtslink wird an der Adresse
+#    ODER an der Beschriftung erkannt, Reihenfolge nach Güte, fremde Hosts
+#    bleiben draußen. Erst wenn kein Link weiterhalf, wird geraten - die
+#    Pfadliste ist dabei um die .htm-Varianten gewachsen.
+#    Dazu liest crawl.py den Text jetzt aus dem Hauptdokument UND allen
+#    Unterrahmen; ein Impressum in einem <iframe> war vorher unsichtbar.
+#    Seitenanker (#imprint, #js-c641) werden direkt ausgewertet, und wenn ein
+#    modaler Dialog seinen Inhalt per iframe nachlädt, wird dessen Quelle wie
+#    eine normale Seite geladen statt den Dialog anzuklicken.
+#    Wirkung, an vier echten Seiten gemessen - vorher fand KEINE ihr
+#    Impressum, jetzt alle vier:
+#      zahnarzt-argus.de      #js-… (Modal-iframe)    72 Wörter
+#      tierarzt-hahn.de       /about/               1157 Wörter
+#      gaststaette-lapp.de    /about/                139 Wörter
+#      tierarztpraxis-dörr.de /impressum.htm         580 Wörter
+#    Erst dadurch greifen die Regeln, die den Impressumstext brauchen:
+#    tierarztpraxis-dörr.de meldet jetzt recht.outdated_legal_reference, und
+#    der Briefkanal bekommt Absenderangaben.
+#  - recht.outdated_legal_reference erkennt abgelöste Gesetze auch
+#    AUSGESCHRIEBEN ("§ 5 Telemediengesetz", "§ 10 Absatz 3 MDStV"). Mit
+#    reiner Abkürzungssuche blieben solche Impressen unentdeckt. Nennt die
+#    Seite zusätzlich das aktuelle Recht (DDG/MStV), gibt es weiterhin
+#    keinen Abzug.
+#  - Zeitbudget: drei statt vier Versuche je Rechtsseite, Navigation dort mit
+#    10s statt 15s. Der Normalfall ist schneller als vorher, weil der erste
+#    Versuch meist sitzt; gedeckelt wird nur der schlechteste Fall.
+#  - KEINE Änderung an Gewichten. Regressionslauf gegen die gespeicherten
+#    Crawls: 106 Läufe, 0 Änderungen, niemand schlechter.
 # Änderungen ggü. .18:
 #  - Schema-Rückfall greift jetzt auch, wenn der Crawl WIRFT statt einen
 #    schlechten Status zu liefern. Ein TLS-Fehler (net::ERR_CERT_*,

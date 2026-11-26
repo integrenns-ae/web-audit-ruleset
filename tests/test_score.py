@@ -726,3 +726,34 @@ def test_echt_fehlende_erklaerung_wird_weiter_gemeldet():
     ruleset = load_ruleset()
     r = score(infra, perf, netz, crawl, ruleset)
     assert any(f["id"] == "recht.datenschutz_missing" for f in r["findings"])
+
+
+# --- Abgeloeste Gesetze auch ausgeschrieben erkennen (v.20) ----------------
+
+def _imp(txt):
+    return {"legal_subpages": {"impressum": {"reachable": True, "text_content": txt}}}
+
+
+def test_ausgeschriebene_gesetze_zaehlen():
+    """zahnarzt-argus.de schreibt "§ 5 Telemediengesetz" aus,
+    tierarztpraxis-dörr.de "§ 10 Absatz 3 MDStV"."""
+    from pipeline.score import _check_outdated_legal_reference as f
+    for txt in ("Pflichtangaben nach § 5 Telemediengesetz",
+                "Inhaltlich verantwortlich gemäß § 10 Absatz 3 MDStV",
+                "nach dem Mediendienste-Staatsvertrag",
+                "Angaben gemäß § 5 TMG",
+                "verantwortlich nach § 55 Abs. 2 RStV"):
+        assert f(None, None, None, _imp(txt)) is True, txt
+
+
+def test_aktuelles_recht_hebt_den_abzug_auf():
+    from pipeline.score import _check_outdated_legal_reference as f
+    for txt in ("Angaben gemäß § 5 DDG",
+                "nach dem Digitale-Dienste-Gesetz (DDG), vormals TMG",
+                "verantwortlich nach § 18 Abs. 2 MStV"):
+        assert f(None, None, None, _imp(txt)) is False, txt
+
+
+def test_ohne_gesetzesnennung_kein_abzug():
+    from pipeline.score import _check_outdated_legal_reference as f
+    assert f(None, None, None, _imp("Impressum. Max Mustermann, Gießen.")) is False

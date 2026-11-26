@@ -24,6 +24,100 @@ from urllib.parse import urlparse
 
 from playwright.async_api import async_playwright
 
+from pipeline.rechtsseiten import (
+    FESTE_PFADE, als_pfad, ist_brauchbar, ziele_fuer,
+)
+
+# Zeitlimit je Rechtsseiten-Navigation. Knapper als die 15s der Startseite,
+# weil im schlechtesten Fall mehrere Versuche hintereinander laufen und der
+# Worker den ganzen Lauf nach 120s abbricht.
+RECHTSSEITE_TIMEOUT_MS = 10_000
+
+
+async def _sichtbarer_text(page) -> str:
+    """innerText des Hauptdokuments PLUS aller Unterrahmen.
+
+    Ohne die Unterrahmen bleibt ein Impressum unsichtbar, das — wie bei
+    zahnarzt-argus.de — in einem <iframe> steckt: document.body.innerText
+    reicht nicht ueber die Rahmengrenze.
+    """
+    teile = []
+    for rahmen in page.frames:
+        try:
+            text = await rahmen.evaluate(
+                "() => document.body ? document.body.innerText : ''")
+        except Exception:
+            continue
+        if text and text.strip():
+            teile.append(text)
+    return "\n".join(teile)
+
+
+async def _anker_inhalt(page, anker_id: str):
+    """Text eines Seitenankers und, falls vorhanden, die Quelle seines iframes.
+
+    Modale Dialoge (uk-modal u.a.) tragen ihren Inhalt entweder direkt im
+    Element oder laden ihn per iframe nach. Der iframe wird NICHT geklickt,
+    sondern seine Quelle zurueckgegeben und wie eine normale Seite geladen —
+    das ist deterministisch und haengt nicht am Verhalten des Dialogs.
+    """
+    try:
+        return await page.evaluate(
+            """(id) => {
+                const el = document.getElementById(id);
+                if (!el) return {text: '', iframe: ''};
+                const f = el.querySelector('iframe[src]');
+                return {text: el.innerText || '', iframe: f ? f.src : ''};
+            }""",
+            anker_id,
+        )
+    except Exception:
+        return {"text": "", "iframe": ""}
+
+
+async def _rechtsseite_holen(page, start_url: str, schluessel: str, alle_links: list) -> dict:
+    """Eine Rechtsseite finden und ihren Text einlesen."""
+    leer = {"reachable": False, "path": None, "word_count": 0, "text_content": ""}
+
+    def gefunden(ziel, text):
+        return {"reachable": True, "path": als_pfad(ziel, start_url),
+                "word_count": len(text.split()), "text_content": text}
+
+    nachzuladen = []
+    for ziel in ziele_fuer(alle_links, schluessel, start_url):
+        try:
+            if ziel.startswith("#"):
+                # Anker nur auswerten, solange wir auf der Startseite stehen.
+                if page.url.rstrip("/") != start_url.rstrip("/"):
+                    await page.goto(start_url, wait_until="domcontentloaded", timeout=15_000)
+                inhalt = await _anker_inhalt(page, ziel[1:])
+                if ist_brauchbar(inhalt.get("text", "")):
+                    return gefunden(ziel, inhalt["text"])
+                if inhalt.get("iframe"):
+                    nachzuladen.append((ziel, inhalt["iframe"]))
+                continue
+
+            antwort = await page.goto(ziel, wait_until="networkidle", timeout=RECHTSSEITE_TIMEOUT_MS)
+            await page.wait_for_timeout(800)
+            text = await _sichtbarer_text(page)
+            if antwort and antwort.status < 400 and ist_brauchbar(text):
+                return gefunden(ziel, text)
+        except Exception:
+            continue
+
+    # Zuletzt die iframe-Quellen aus Modalen - sie kosten eine eigene Navigation.
+    for anker, quelle in nachzuladen:
+        try:
+            antwort = await page.goto(quelle, wait_until="networkidle", timeout=RECHTSSEITE_TIMEOUT_MS)
+            await page.wait_for_timeout(500)
+            text = await _sichtbarer_text(page)
+            if antwort and antwort.status < 400 and ist_brauchbar(text):
+                return gefunden(anker, text)
+        except Exception:
+            continue
+
+    return leer
+
 
 async def crawl(url: str, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -90,28 +184,21 @@ async def crawl(url: str, out_dir: Path) -> dict:
         # die leere App-Huelle. Playwright navigiert wie ein echter Browser und lässt
         # das Client-Routing tatsächlich greifen - deshalb hier zusätzlich per
         # Browser-Navigation prüfen, nicht nur per HTTP-Request in probe_infra.
+        # Erst den LINKS der Seite folgen, erst danach Pfade raten. Begruendung
+        # und Auswahl-Logik in pipeline/rechtsseiten.py.
+        alle_links = await page.evaluate("""
+            () => [...document.querySelectorAll('a[href]')].map(a => ({
+                href: a.getAttribute('href') || '',
+                abs:  a.href || '',
+                text: (a.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 200),
+            }))
+        """)
+
         legal_subpages = {}
-        candidate_paths = {
-            "impressum": ["/impressum", "/impressum.html", "/legal-notice"],
-            "datenschutz": ["/datenschutz", "/datenschutzerklaerung", "/privacy-policy"],
-        }
-        base = url.rstrip("/")
-        for key, paths in candidate_paths.items():
-            legal_subpages[key] = {"reachable": False, "path": None, "word_count": 0, "text_content": ""}
-            for path in paths:
-                try:
-                    resp = await page.goto(base + path, wait_until="networkidle", timeout=15_000)
-                    await page.wait_for_timeout(800)
-                    text_only = await page.evaluate("() => document.body.innerText || ''")
-                    word_count = len(text_only.split())
-                    if resp and resp.status < 400 and word_count > 40:
-                        legal_subpages[key] = {
-                            "reachable": True, "path": path, "word_count": word_count,
-                            "text_content": text_only,
-                        }
-                        break
-                except Exception:
-                    continue
+        for key in FESTE_PFADE:
+            legal_subpages[key] = await _rechtsseite_holen(
+                page, url, key, alle_links)
+
         # zurueck zur Startseite navigieren, falls weitere Schritte im selben Context folgen
         await page.goto(url, wait_until="domcontentloaded", timeout=15_000)
 
