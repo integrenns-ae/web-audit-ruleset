@@ -8,7 +8,24 @@
 # und "version" hochzählen — alte Audit-Ergebnisse bleiben dadurch nachvollziehbar
 # einer bestimmten Regelwerk-Version zugeordnet (siehe run-manifest.ruleset_version).
 
-version: "2026-07-27.17"
+version: "2026-07-27.18"
+# Änderungen ggü. .17:
+#  - recht.datenschutz_missing loeste Fehlbefunde aus, wenn die
+#    Datenschutzerklärung MIT im Impressum abgedruckt ist. Kleine deutsche
+#    Firmenseiten machen das sehr oft: keine eigene Seite /datenschutz, kein
+#    Link, der so heißt - die Erklärung steht trotzdem da, zwei Klicks
+#    entfernt. Beobachtet an haarstudio-albohn.de (vollständige
+#    DSGVO-Erklärung, 2943 Wörter, auf /impressum) und an
+#    tierarztpraxis-dörr.de.
+#    Die Regel kennt deshalb einen vierten Weg: pipeline/score.py::
+#    enthaelt_datenschutzerklaerung prüft den Impressumstext.
+#    Bewusst streng, damit kein Freifahrtschein entsteht - verlangt werden
+#    eine echte Überschrift (Datenschutzerklärung/-hinweise/-bestimmungen/
+#    -richtlinie/privacy policy), das Wort "personenbezogen" UND mindestens
+#    150 Wörter. Ein Impressum mit dem Satz "Datenschutz ist uns wichtig"
+#    zählt nicht, ein blosser Verweis auf eine Erklärung auch nicht.
+#    Richtung wie bei .17 konservativ: kann Abzüge nur ZURÜCKNEHMEN.
+#  - KEINE Änderung an Gewichten.
 # Änderungen ggü. .16:
 #  - recht.impressum_missing / recht.datenschutz_missing lösten reihenweise
 #    FEHLBEFUNDE aus. Ursache in pipeline/probe_network.py::check_legal_pages_linked:

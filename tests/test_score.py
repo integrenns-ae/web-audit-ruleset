@@ -640,3 +640,89 @@ def test_mehrere_bedingungen_und_einzelne_bleiben_zulaessig():
     praxis["html"] = "<title>Zahnarztpraxis Dr. Meier</title>" + crawl["html"]
     ergebnis = score_fn(infra, perf, network, praxis, einzeln)
     assert "inhalt.no_references_or_portfolio" in ergebnis["suppressed_rules"]
+
+
+# ===========================================================================
+# Datenschutzerklärung im Impressum mit abgedruckt (v.18)
+# ===========================================================================
+
+from pipeline.score import enthaelt_datenschutzerklaerung  # noqa: E402
+
+_ECHTE_ERKLAERUNG = (
+    "Impressum Haarstudio Monika Albohn Hauptstr. 60 35463 Fernwald "
+    "Datenschutzerklärung 1) Information über die Erhebung personenbezogener "
+    "Daten und Kontaktdaten des Verantwortlichen. Verantwortlicher für die "
+    "Datenverarbeitung auf dieser Website im Sinne der "
+    "Datenschutz-Grundverordnung (DSGVO) ist Haarstudio Monika Albohn. "
+) + "Weiterer Erklärungstext zu Zwecken und Rechtsgrundlagen. " * 30
+
+
+def test_erklaerung_im_impressum_wird_erkannt():
+    assert enthaelt_datenschutzerklaerung(_ECHTE_ERKLAERUNG) is True
+
+
+def test_aeltere_fassung_mit_datenschutzrichtlinie():
+    """tierarztpraxis-dörr.de: vorgrundverordnungs-Text, trotzdem vorhanden.
+    Die Veraltung meldet recht.outdated_legal_reference, nicht diese Regel."""
+    # Laenge wie das echte Dokument (rund 600 Woerter).
+    txt = ("Impressum Verantwortlich gem. § 6 MDStV: Cornelia Dörr. "
+           "Datenschutzrichtlinie Server Logfiles. Bei den Server Logfiles "
+           "handelt es sich um Daten, die bei Ihrem Zugriff erfasst werden. "
+           "Die Erfassung personenbezogener Daten durch Google. "
+           + "Weiterer Absatz der Erklaerung. " * 120)
+    assert enthaelt_datenschutzerklaerung(txt) is True
+
+
+def test_blosse_erwaehnung_genuegt_nicht():
+    """Sonst waere die Regel wertlos: Fast jedes Impressum enthaelt das Wort
+    'Datenschutz' irgendwo."""
+    for txt in (
+        "Impressum. Datenschutz ist uns wichtig. " + "Fuelltext. " * 60,
+        "Impressum. Siehe unsere Datenschutzerklärung. " + "Fuelltext. " * 60,
+    ):
+        assert enthaelt_datenschutzerklaerung(txt) is False, txt[:50]
+
+
+def test_zu_kurzer_text_genuegt_nicht():
+    kurz = ("Datenschutzerklärung: Wir verarbeiten personenbezogene Daten "
+            "nur zur Auslieferung der Seite.")
+    assert enthaelt_datenschutzerklaerung(kurz) is False
+
+
+def test_leerer_text():
+    assert enthaelt_datenschutzerklaerung("") is False
+    assert enthaelt_datenschutzerklaerung(None) is False
+
+
+def test_regel_greift_nicht_mehr_bei_erklaerung_im_impressum():
+    """Der eigentliche Fehlbefund: /datenschutz gibt es nicht, kein Link
+    heisst so - die Erklaerung steht aber im Impressum."""
+    infra, perf, network, crawl = load_fixture("bad_site", "bad.example")
+    crawl = dict(crawl)
+    crawl["legal_subpages"] = {
+        "impressum": {"reachable": True, "path": "/impressum",
+                      "word_count": 400, "text_content": _ECHTE_ERKLAERUNG},
+        "datenschutz": {"reachable": False, "path": None,
+                        "word_count": 0, "text_content": ""},
+    }
+    netz = dict(network)
+    netz["legal_pages_linked"] = {"impressum_linked": True, "datenschutz_linked": False}
+    ruleset = load_ruleset()
+    r = score(infra, perf, netz, crawl, ruleset)
+    assert not any(f["id"] == "recht.datenschutz_missing" for f in r["findings"])
+
+
+def test_echt_fehlende_erklaerung_wird_weiter_gemeldet():
+    """Gegenprobe - die Regel darf nicht zahnlos werden."""
+    infra, perf, network, crawl = load_fixture("bad_site", "bad.example")
+    crawl = dict(crawl)
+    crawl["legal_subpages"] = {
+        "impressum": {"reachable": True, "path": "/impressum", "word_count": 40,
+                      "text_content": "Impressum. Max Mustermann, Musterweg 1, 35390 Gießen."},
+        "datenschutz": {"reachable": False, "path": None, "word_count": 0, "text_content": ""},
+    }
+    netz = dict(network)
+    netz["legal_pages_linked"] = {"impressum_linked": True, "datenschutz_linked": False}
+    ruleset = load_ruleset()
+    r = score(infra, perf, netz, crawl, ruleset)
+    assert any(f["id"] == "recht.datenschutz_missing" for f in r["findings"])

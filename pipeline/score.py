@@ -333,11 +333,45 @@ def _check_impressum_missing(infra, perf, network, crawl_meta):
     return not (linked or reachable_http or reachable_spa)
 
 
+# Kleine deutsche Firmenseiten drucken die Datenschutzerklärung sehr oft MIT
+# ins Impressum. Eine eigene Seite /datenschutz gibt es dann nicht, und auch
+# keinen Link, der so heißt - trotzdem ist die Erklärung vorhanden und zwei
+# Klicks entfernt. Beobachtet an haarstudio-albohn.de (vollständige
+# DSGVO-Erklärung, 2943 Wörter, auf /impressum) und an tierarztpraxis-dörr.de.
+_DS_UEBERSCHRIFTEN = (
+    "datenschutzerklärung", "datenschutzerklaerung", "datenschutzhinweis",
+    "datenschutzbestimmungen", "datenschutzrichtlinie", "privacy policy",
+)
+_DS_MINDESTWOERTER = 150
+
+
+def enthaelt_datenschutzerklaerung(text: str) -> bool:
+    """Steckt in diesem Text eine eigenständige Datenschutzerklärung?
+
+    Bewusst streng, damit kein Freifahrtschein entsteht: Eine Überschrift
+    allein genügt nicht. Es muss zusätzlich von personenbezogenen Daten die
+    Rede sein und der Text eine Mindestlänge haben. Ein Impressum mit dem
+    bloßen Satz "Datenschutz ist uns wichtig" zählt damit NICHT.
+    """
+    if not text:
+        return False
+    t = text.lower()
+    if not any(w in t for w in _DS_UEBERSCHRIFTEN):
+        return False
+    if "personenbezogen" not in t:
+        return False
+    return len(text.split()) >= _DS_MINDESTWOERTER
+
+
 def _check_datenschutz_missing(infra, perf, network, crawl_meta):
     linked = network.get("legal_pages_linked", {}).get("datenschutz_linked", False)
     reachable_http = infra.get("legal_pages", {}).get("datenschutz", {}).get("reachable", False)
     reachable_spa = crawl_meta.get("legal_subpages", {}).get("datenschutz", {}).get("reachable", False)
-    return not (linked or reachable_http or reachable_spa)
+    # Vierter Weg: mit im Impressum abgedruckt.
+    im_impressum = enthaelt_datenschutzerklaerung(
+        crawl_meta.get("legal_subpages", {}).get("impressum", {}).get("text_content", "") or ""
+    )
+    return not (linked or reachable_http or reachable_spa or im_impressum)
 
 
 def _check_third_party_before_consent(infra, perf, network, crawl_meta):
